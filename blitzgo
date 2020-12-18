@@ -62,14 +62,44 @@ function install(){
 		sudo mv /tmp/${dirname}/go_mps /opt/blitz/ || { sudo rm -r -f /tmp/${dirname};exit 1; };\
 		sudo rm -r -f /tmp/${dirname};\
 		sudo /bin/mv -f /opt/blitz/go_mps/libprotobuf.so.9 /lib64/;\
-		sudo /bin/mv -f /opt/blitz/go_mps/go_mps.service /etc/systemd/system/go_mps.service;\
+		sudo /bin/mv -f /opt/blitz/go_mps/go_mps.service /etc/systemd/system/mps.service;\
 		sudo systemctl daemon-reload;\
-		sudo systemctl enable go_mps;\
-		sudo systemctl stop go_mps;\
+		sudo systemctl enable mps;\
+		sudo systemctl stop mps;\
 		"
 	echo -e "\r\nindex=${index}   host=${host}  install success"
 }
 
+
+function start(){
+	echo -e "\r\n--------------------------------------------------------------------\r\n"
+	echo "$1"
+	unset startMap
+	declare -A startMap
+	IFS="${OLDIFS}"
+	for arg in $1;do
+		local keystr="${arg%%=*}"
+		local valuestr="${arg#*=}"
+		if [ -n "${keystr}" -a -n "${valuestr}" ];then
+			startMap["${keystr}"]="${valuestr}"
+		fi
+	done
+	local index="${installMap["blitz_index"]}"
+	test -n "${index}" || { echo "blitz_index not found"; exit 1; }
+	local name="${installMap["blitz_name"]}"
+	test -n "${name}" || { echo "blitz_name not found"; exit 1; }
+	local port="${installMap["ansible_port"]}"
+	test -n "${port}" || { echo "ansible_port not found"; exit 1; }
+	local user="${installMap["ansible_user"]}"
+	test -n "${user}" || { echo "ansible_user not found"; exit 1; }
+	local host="${installMap["ansible_host"]}"
+	test -n "${host}" || { echo "ansible_host not found"; exit 1; }
+	ssh -o "StrictHostKeyChecking no" -p "${port}" "${user}"@"${host}" \
+		"set -euo pipefail || exit 1;\
+		sudo systemctl restart ${name};\
+		"
+	echo -e "\r\nindex=${index}   host=${host}  start success"
+}
 
 
 function process(){
@@ -87,6 +117,8 @@ function process(){
 	test -z "${action}" && { echo "blitz_action not found"; exit 1; }
 	if [ "${action}" = "install" ];then
 		install "$1"
+	elif [ "${action}" = "service-start" ];then
+		start "$1"
 	else
 		echo "unknown action:${action}"
 		exit 1
@@ -94,16 +126,79 @@ function process(){
 }
 
 
-test $# -eq 1 || { echo "usage:$0 file"; exit 1; }
-test -f ${1} || { echo "${1} not exist"; exit 1; }
-cat ${1}
-arguments=$(sed 1d ${1})
+
+function getValue(){
+	unset getMap
+	declare -A getMap
+	IFS="${OLDIFS}"
+	for arg in $1;do
+		local keystr="${arg%%=*}"
+		local valuestr="${arg#*=}"
+		if [ -n "${keystr}" -a -n "${valuestr}" ];then
+			getMap["${keystr}"]="${valuestr}"
+		fi
+	done
+	echo ${getMap["${2}"]}
+	return 0
+}
+
+###########################################
+#检测输入
+test $# -eq 5 || { echo "usage:$0 -i  file -l blitz file"; exit 1; }
+test -f ${2} || { echo "${2} not exist"; exit 1; }
+test -f ${5} || { echo "${5} not exist"; exit 1; }
+cat ${2}
+###########################################
+oneLine=$(sed -n '1p' ${2} | tr -d '\r' | tr -d '\n')
+test -n "$oneLine"
+secondLine=$(sed -n '2p' ${2} | tr -d '\r' | tr -d '\n')
+blitzAction=$(getValue "$secondLine" "blitz_action")
+test -n "$blitzAction"
+
+#非安装动作
+if [ "$blitzAction" != "install" ];then
+	arguments=$(sed 1d ${2})
+	IFS=$'\n'
+	for arg in $arguments;do
+		arg="$(echo $arg | tr -d '\r' | tr -d '\n' | xargs)"
+		if [ -n "$arg" ];then
+			process "$arg"
+		fi		
+	done
+	success="yes"
+	exit 0
+fi
+
+blitzName=$(getValue "$secondLine" "blitz_name")
+test -n "$blitzName"
+
+#查看安装类型和服务器名是否一样
+if [[ ! $oneLine =~ "$blitzName" ]];then
+	echo "install type not same"
+	exit 1
+fi
+
+#安装非go版的服务
+if [[ ! $oneLine =~ "go" ]];then
+	sed '1c [blitz]' ${2}
+	ansible-playbook ${1} ${2} ${3} ${4} ${5}
+	success="yes"
+	exit 0
+fi
+
+#安装go版的服务
+arguments=$(sed 1d ${2})
 IFS=$'\n'
 for arg in $arguments;do
 	arg="$(echo $arg | tr -d '\r' | tr -d '\n' | xargs)"
+	arg=$(echo $arg | sed "s:/deploy/${blitzName}/repository/:/deploy/go_${blitzName}/repository/:g")
 	if [ -n "$arg" ];then
 		process "$arg"
 	fi		
 done
 success="yes"
 exit 0
+
+
+
+
