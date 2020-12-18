@@ -1,77 +1,109 @@
 #!/bin/bash
-
-#declare err
-declare -r ErrInput=1
-declare -r ErrFile=2
-declare -r ErrRemote=3
-
-if [ $# -ne 1 ];then
-	echo "input arguments error"
-	echo "usage:${0} file"
-	exit $ErrInput
-fi
-
-test -f ${1} || { echo "${1} not exist" ;exit $ErrFile; }
-cat ${1}
-arguments=$(sed -n 2p ${1} | tr -d '\r' | tr -d '\n')
-#declare hashmap
-declare -A hashMap
-for arg in $arguments;do
-	keystr="${arg%%=*}"
-	valuestr="${arg#*=}"
-	if [ -n "${keystr}" -a -n "${valuestr}" ];then
-		hashMap["${keystr}"]="${valuestr}"
+set -euo pipefail || { echo "set failed";exit 1;  }
+success="no"
+function onexit(){
+	if [ "${success}" = "no" ];then
+		echo "$0 fail"
+	else
+		echo "$0 success"
 	fi
-done
+}
+trap onexit EXIT
 
+OLDIFS="$IFS"
 
 function install(){
-	echo -e "\r\n--------------------------------install---------------------------------------\r\n"
-	test -z "${hashMap["blitz_url"]}" && { echo "blitz_url not found"; exit $ErrInput; }
-	test -z "${hashMap["blitz_name"]}" && { echo "blitz_name not found"; exit $ErrInput; }
-	test -z "${hashMap["blitz_index"]}" && { echo "blitz_index not found"; exit $ErrInput; }
-	test -z "${hashMap["blitz_zookeeper"]}" && { echo "blitz_zookeeper not found"; exit $ErrInput; }
-	test -z "${hashMap["blitz_ver"]}" && { echo "blitz_ver not found"; exit $ErrInput; }
-	test -z "${hashMap["blitz_tag"]}" && { echo "blitz_tag not found"; exit $ErrInput; }
-	test -z "${hashMap["ansible_port"]}" && { echo "ansible_port not found"; exit $ErrInput; }
-	test -z "${hashMap["ansible_user"]}" && { echo "ansible_user not found"; exit $ErrInput; }
-	test -z "${hashMap["ansible_host"]}" && { echo "ansible_host not found"; exit $ErrInput; }
-	cd ~
+	echo -e "\r\n--------------------------------------------------------------------\r\n"
+	echo "$1"
+	unset installMap
+	declare -A installMap
+	IFS="${OLDIFS}"
+	for arg in $1;do
+		local keystr="${arg%%=*}"
+		local valuestr="${arg#*=}"
+		if [ -n "${keystr}" -a -n "${valuestr}" ];then
+			installMap["${keystr}"]="${valuestr}"
+		fi
+	done
+	local url="${installMap["blitz_url"]}"
+	test -n "${url}" ||  { echo "blitz_url not found"; exit 1; }
+	local name="${installMap["blitz_name"]}"
+	test -n "${name}" || { echo "blitz_name not found"; exit 1; }
+	local index="${installMap["blitz_index"]}"
+	test -n "${index}" || { echo "blitz_index not found"; exit 1; }
+	local zookeeper="${installMap["blitz_zookeeper"]}"
+	test -n "${zookeeper}" || { echo "blitz_zookeeper not found"; exit 1; }
+	local ver="${installMap["blitz_ver"]}"
+	test -n "${ver}" || { echo "blitz_ver not found"; exit 1; }
+	local tag="${installMap["blitz_tag"]}"
+	test -n "${tag}" || { echo "blitz_tag not found"; exit 1; }
+	local port="${installMap["ansible_port"]}"
+	test -n "${port}" || { echo "ansible_port not found"; exit 1; }
+	local user="${installMap["ansible_user"]}"
+	test -n "${user}" || { echo "ansible_user not found"; exit 1; }
+	local host="${installMap["ansible_host"]}"
+	test -n "${host}" || { echo "ansible_host not found"; exit 1; }
 	local dirname=$(uuidgen)
-	rm -r -f ${dirname}
-	mkdir ${dirname}
-	cd ${dirname} || exit $Errile
-	echo -e "downloading file:${hashMap["blitz_url"]}\r\n"
-	curl -o archive.tar.gz  ${hashMap["blitz_url"]} || { rm -r -f ../${dirname}; exit $ErrFile; }
-	tar -x -v -z -f archive.tar.gz -C ./ || { rm -r -f ../${dirname}; exit $ErrFile; }
-	rm -f archive.tar.gz || { rm -r -f ../${dirname}; exit $ErrFile; }
-	mv go_mps* mps || { rm -r -f ../${dirname}; exit $ErrFile; }
-	test -f ./mps/blitz.properties || { rm -r -f ../${dirname}; exit $ErrFile; }
-	echo "blitz_name=${hashMap["blitz_name"]}" >> ./mps/blitz.properties
-	echo "blitz_index=${hashMap["blitz_index"]}" >> ./mps/blitz.properties
-	echo "blitz_zookeeper=${hashMap["blitz_zookeeper"]}" >> ./mps/blitz.properties
-	echo "blitz_ver=${hashMap["blitz_ver"]}" >> ./mps/blitz.properties
-	echo "blitz_tag=${hashMap["blitz_tag"]}" >> ./mps/blitz.properties
-        tar -c -z -f ${dirname}.tar.gz mps || { rm -r -f ../${dirname}; exit $ErrFile; } 
-	scp -o "StrictHostKeyChecking no"   -P ${hashMap["ansible_port"]}   ${dirname}.tar.gz      ${hashMap["ansible_user"]}@${hashMap["ansible_host"]}:/tmp/  || { rm -r -f ../${dirname}; exit $ErrFile; }
-	rm -r -f ../${dirname}
-        ssh -o "StrictHostKeyChecking no" -p ${hashMap["ansible_port"]} ${hashMap["ansible_user"]}@${hashMap["ansible_host"]} "sudo mkdir -p /opt/blitz && sudo chown root:root /tmp/${dirname}.tar.gz && sudo rm -r -f /opt/blitz/mps && sudo tar -x -z -f /tmp/${dirname}.tar.gz -C /opt/blitz/ &&  sudo rm -r -f /tmp/${dirname}.tar.gz  && sudo /bin/mv -f /opt/blitz/mps/libprotobuf.so.9 /lib64/ && sudo /bin/mv -f /opt/blitz/mps/go_mps.service /etc/systemd/system/mps.service && sudo systemctl daemon-reload && sudo systemctl enable mps && sudo systemctl stop mps" || exit $ErrRemote
+	ssh -o "StrictHostKeyChecking no" -p "${port}" "${user}"@"${host}" \
+		"set -euo pipefail || exit 1;\
+		sudo rm -r -f /tmp/${dirname} || true;\
+		sudo mkdir -p /tmp/${dirname};\
+		sudo curl -o /tmp/${dirname}/archive.tar.gz  "${url}" || { sudo rm -r -f /tmp/${dirname}; exit 1; };\
+		sudo chown root:root /tmp/${dirname}/archive.tar.gz;\
+		sudo tar -x -z -f /tmp/${dirname}/archive.tar.gz -C /tmp/${dirname}/ || { sudo rm -r -f /tmp/${dirname};exit 1; };\
+		sudo mv /tmp/${dirname}/go_mps* /tmp/${dirname}/go_mps;\
+		sudo echo "blitz_name=${name}" >> /tmp/${dirname}/go_mps/blitz.properties;\
+		sudo echo "blitz_index=${index}" >> /tmp/${dirname}/go_mps/blitz.properties;\
+		sudo echo "blitz_zookeeper=${zookeeper}" >> /tmp/${dirname}/go_mps/blitz.properties;\
+		sudo echo "blitz_ver=${ver}" >> /tmp/${dirname}/go_mps/blitz.properties;\
+		sudo echo "blitz_tag=${tag}" >> /tmp/${dirname}/go_mps/blitz.properties;\
+		sudo mkdir -p /opt/blitz;\
+		sudo rm -r -f /opt/blitz/go_mps*;\
+		sudo mv /tmp/${dirname}/go_mps /opt/blitz/ || { sudo rm -r -f /tmp/${dirname};exit 1; };\
+		sudo rm -r -f /tmp/${dirname};\
+		sudo /bin/mv -f /opt/blitz/go_mps/libprotobuf.so.9 /lib64/;\
+		sudo /bin/mv -f /opt/blitz/go_mps/go_mps.service /etc/systemd/system/go_mps.service;\
+		sudo systemctl daemon-reload;\
+		sudo systemctl enable go_mps;\
+		sudo systemctl stop go_mps;\
+		"
+	echo -e "\r\nindex=${index}   host=${host}  install success"
 }
 
 
 
+function process(){
+	unset processMap
+	declare -A processMap
+	IFS="${OLDIFS}"
+	for arg in $1;do
+		local keystr="${arg%%=*}"
+		local valuestr="${arg#*=}"
+		if [ -n "${keystr}" -a -n "${valuestr}" ];then
+			processMap["${keystr}"]="${valuestr}"
+		fi
+	done
+	local action="${processMap["blitz_action"]}"
+	test -z "${action}" && { echo "blitz_action not found"; exit 1; }
+	if [ "${action}" = "install" ];then
+		install "$1"
+	else
+		echo "unknown action:${action}"
+		exit 1
+	fi
+}
 
-action="${hashMap["blitz_action"]}"
-test -z "${action}" && { echo "blitz_action not found"; exit $ErrInput; }
 
-if [ "${action}" = "install" ];then
-	install
-else
-	echo "unknown action:${action}"
-	exit $ErrInput
-fi	
-echo "--------------------------------------------------------------"
-echo "!!!!!!!!!!!!!!!!!!!!!!${action} success!!!!!!!!!!!!!!!!!!!!!!!"
-echo "--------------------------------------------------------------"
+test $# -eq 1 || { echo "usage:$0 file"; exit 1; }
+test -f ${1} || { echo "${1} not exist"; exit 1; }
+cat ${1}
+arguments=$(sed 1d ${1})
+IFS=$'\n'
+for arg in $arguments;do
+	arg="$(echo $arg | tr -d '\r' | tr -d '\n' | xargs)"
+	if [ -n "$arg" ];then
+		process "$arg"
+	fi		
+done
+success="yes"
 exit 0
-
