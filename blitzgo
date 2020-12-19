@@ -84,15 +84,15 @@ function start(){
 			startMap["${keystr}"]="${valuestr}"
 		fi
 	done
-	local index="${installMap["blitz_index"]}"
+	local index="${startMap["blitz_index"]}"
 	test -n "${index}" || { echo "blitz_index not found"; exit 1; }
-	local name="${installMap["blitz_name"]}"
+	local name="${startMap["blitz_name"]}"
 	test -n "${name}" || { echo "blitz_name not found"; exit 1; }
-	local port="${installMap["ansible_port"]}"
+	local port="${startMap["ansible_port"]}"
 	test -n "${port}" || { echo "ansible_port not found"; exit 1; }
-	local user="${installMap["ansible_user"]}"
+	local user="${startMap["ansible_user"]}"
 	test -n "${user}" || { echo "ansible_user not found"; exit 1; }
-	local host="${installMap["ansible_host"]}"
+	local host="${startMap["ansible_host"]}"
 	test -n "${host}" || { echo "ansible_host not found"; exit 1; }
 	ssh -o "StrictHostKeyChecking no" -p "${port}" "${user}"@"${host}" \
 		"set -euo pipefail || exit 1;\
