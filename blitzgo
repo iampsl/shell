@@ -54,11 +54,11 @@ function install(){
 		sudo chown root:root /tmp/${dirname}/archive.tar.gz;\
 		sudo tar -x -z -f /tmp/${dirname}/archive.tar.gz -C /tmp/${dirname}/ || { sudo rm -r -f /tmp/${dirname};exit 1; };\
 		sudo mv /tmp/${dirname}/go_mps* /tmp/${dirname}/go_mps;\
-		sudo echo "blitz_name=${name}" >> /tmp/${dirname}/go_mps/blitz.properties;\
-		sudo echo "blitz_index=${index}" >> /tmp/${dirname}/go_mps/blitz.properties;\
-		sudo echo "blitz_zookeeper=${zookeeper}" >> /tmp/${dirname}/go_mps/blitz.properties;\
-		sudo echo "blitz_ver=${ver}" >> /tmp/${dirname}/go_mps/blitz.properties;\
-		sudo echo "blitz_tag=${tag}" >> /tmp/${dirname}/go_mps/blitz.properties;\
+		echo "blitz_name=${name}" | sudo tee -a /tmp/${dirname}/go_mps/blitz.properties;\
+		echo "blitz_index=${index}" | sudo tee -a /tmp/${dirname}/go_mps/blitz.properties;\
+		echo "blitz_zookeeper=${zookeeper}" | sudo tee -a /tmp/${dirname}/go_mps/blitz.properties;\
+		echo "blitz_ver=${ver}" | sudo tee -a /tmp/${dirname}/go_mps/blitz.properties;\
+		echo "blitz_tag=${tag}" | sudo tee -a /tmp/${dirname}/go_mps/blitz.properties;\
 		sudo mkdir -p /opt/blitz;\
 		sudo rm -r -f /opt/blitz/go_mps*;\
 		sudo mv /tmp/${dirname}/go_mps /opt/blitz/ || { sudo rm -r -f /tmp/${dirname};exit 1; };\
