@@ -48,7 +48,9 @@ function install(){
 		"set -euo pipefail || exit 1;\
 		sudo rm -r -f /tmp/${dirname} || true;\
 		sudo mkdir -p /tmp/${dirname};\
+		sudo echo "begin download ${url}";\
 		sudo curl -o /tmp/${dirname}/archive.tar.gz  "${url}" || { sudo rm -r -f /tmp/${dirname}; exit 1; };\
+		sudo echo "end download";\
 		sudo chown root:root /tmp/${dirname}/archive.tar.gz;\
 		sudo tar -x -z -f /tmp/${dirname}/archive.tar.gz -C /tmp/${dirname}/ || { sudo rm -r -f /tmp/${dirname};exit 1; };\
 		sudo mv /tmp/${dirname}/go_mps* /tmp/${dirname}/go_mps;\
@@ -188,7 +190,7 @@ arguments=$(sed 1d ${2})
 IFS=$'\n'
 for arg in $arguments;do
 	arg="$(echo $arg | tr -d '\r' | tr -d '\n' | xargs)"
-	arg=$(echo $arg | sed "s:/deploy/${blitzName}/repository/:/deploy/go_${blitzName}/repository/:g")
+	arg=$(echo $arg | sed "s:/${blitzName}/repository/archive.tar.gz:/go_${blitzName}/repository/archive.tar.gz:g")
 	if [ -n "$arg" ];then
 		process "$arg"
 	fi		
