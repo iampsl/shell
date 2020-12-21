@@ -149,12 +149,9 @@ test -f ${2} || { echo "${2} not exist"; exit 1; }
 test -f ${5} || { echo "${5} not exist"; exit 1; }
 cat ${2}
 ###########################################
-oneLine=$(sed -n '1p' ${2} | tr -d '\r' | tr -d '\n')
-test -n "$oneLine"
 secondLine=$(sed -n '2p' ${2} | tr -d '\r' | tr -d '\n')
 blitzAction=$(getValue "$secondLine" "blitz_action")
 test -n "$blitzAction"
-
 #非安装动作
 if [ "$blitzAction" != "install" ];then
 	arguments=$(sed 1d ${2})
@@ -168,19 +165,19 @@ if [ "$blitzAction" != "install" ];then
 	success="yes"
 	exit 0
 fi
-
+blitzType=$(getValue "$secondLine" "blitz_type")
+test -n "$blitzType"
 blitzName=$(getValue "$secondLine" "blitz_name")
 test -n "$blitzName"
 
 #查看安装类型和服务器名是否一样
-if [[ ! $oneLine =~ "$blitzName" ]];then
+if [[ ! $blitzType =~ "$blitzName" ]];then
 	echo "install type not same"
 	exit 1
 fi
 
 #安装非go版的服务
-if [[ ! $oneLine =~ "go" ]];then
-	sed '1c [blitz]' ${2}
+if [[ ! $blitzType =~ "go" ]];then
 	ansible-playbook ${1} ${2} ${3} ${4} ${5}
 	success="yes"
 	exit 0
