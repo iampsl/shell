@@ -73,7 +73,7 @@ function install(){
 }
 
 
-function start(){
+function startService(){
 	echo -e "\r\n--------------------------------------------------------------------\r\n"
 	echo "$1"
 	unset startMap
@@ -103,6 +103,35 @@ function start(){
 	echo -e "\r\nindex=${index}   host=${host}  start success"
 }
 
+function stopService(){
+	echo -e "\r\n--------------------------------------------------------------------\r\n"
+	echo "$1"
+	unset stopMap
+	declare -A stopMap
+	IFS="${OLDIFS}"
+	for arg in $1;do
+		local keystr="${arg%%=*}"
+		local valuestr="${arg#*=}"
+		if [ -n "${keystr}" -a -n "${valuestr}" ];then
+			stopMap["${keystr}"]="${valuestr}"
+		fi
+	done
+	local index="${stopMap["blitz_index"]}"
+	test -n "${index}" || { echo "blitz_index not found"; exit 1; }
+	local name="${stopMap["blitz_name"]}"
+	test -n "${name}" || { echo "blitz_name not found"; exit 1; }
+	local port="${stopMap["ansible_port"]}"
+	test -n "${port}" || { echo "ansible_port not found"; exit 1; }
+	local user="${stopMap["ansible_user"]}"
+	test -n "${user}" || { echo "ansible_user not found"; exit 1; }
+	local host="${stopMap["ansible_host"]}"
+	test -n "${host}" || { echo "ansible_host not found"; exit 1; }
+	ssh -o "StrictHostKeyChecking no" -p "${port}" "${user}"@"${host}" \
+		"set -euo pipefail || exit 1;\
+		sudo systemctl stop ${name};\
+		"
+	echo -e "\r\nindex=${index}   host=${host}  stop success"
+}
 
 function process(){
 	unset processMap
@@ -120,7 +149,11 @@ function process(){
 	if [ "${action}" = "install" ];then
 		install "$1"
 	elif [ "${action}" = "service-start" ];then
-		start "$1"
+		startService "$1"
+	elif [ "${action}" = "service-stop" ];then
+		stopService "$1"
+	elif [ "${action}" = "service-restart" ];then
+		startService "$1"
 	else
 		echo "unknown action:${action}"
 		exit 1
